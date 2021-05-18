@@ -72,7 +72,7 @@ public class SwerveModule {
         talonConfig.slot0.kF = Config.ModuleConstants.kSteeringF;
         talonConfig.slot0.allowableClosedloopError = Config.ModuleConstants.kSteeringAllowableError;
 
-        talonConfig.feedbackNotContinuous = Config.ModuleConstants.kSteeringEncoderWrap;
+        talonConfig.feedbackNotContinuous = Config.ModuleConstants.kSteeringFeedbackNotContinuous;
 
         talonConfig.motionCruiseVelocity = Config.ModuleConstants.kSteeringMMVel;
         talonConfig.motionAcceleration = Config.ModuleConstants.kSteeringMMAccel;
@@ -108,7 +108,7 @@ public class SwerveModule {
     }
 
     /** Zero steering encoder (ONLY USE ONCE TO SET ABSOLUTE VALUE OF ENCODER) */
-    public void resetDriveEncoder() {
+    public void resetSteeringEncoder() {
         m_steeringMotor.setSelectedSensorPosition(0);
     }
 
@@ -135,11 +135,11 @@ public class SwerveModule {
 
 
 
-    private void revError(String tag, CANError e) {
+    private void revError(String action, CANError e) {
 
     }
 
-    private void ctreError(String tag, ErrorCode e) { 
+    private void ctreError(String action, ErrorCode e) { 
 
     }
 
