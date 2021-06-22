@@ -68,6 +68,7 @@ public final class Config {
         public static final double kWheelDiameterMeters = 0.1015;
 
         public static final double kDriveGearing = 0;
+        public static final double kSteerGearing = 0;
 
         public static final double kSteeringP = 0;
         public static final double kSteeringI = 0;

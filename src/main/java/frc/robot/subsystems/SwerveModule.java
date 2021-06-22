@@ -24,9 +24,10 @@ import edu.wpi.first.wpilibj.kinematics.SwerveModuleState;
 
 public class SwerveModule {
     private final CANSparkMax m_driveMotor; 
-    private final WPI_TalonSRX m_steeringMotor;
+    private final CANSparkMax m_steeringMotor;
 
-    private final CANPIDController m_pidController; 
+    private final CANPIDController m_drivePidController; 
+    private final CANPIDController m_steeringPidController;
 
     /**
      * Constructs a SwerveModule.
@@ -37,48 +38,36 @@ public class SwerveModule {
     public SwerveModule(int driveMotorCANID, int steeringMotorCANID, boolean invertDrive, boolean invertSteering, boolean steeringEncoderReversed) {
 
         m_driveMotor = new CANSparkMax(driveMotorCANID, MotorType.kBrushless); // <----- SUPER IMPORTANT BRUSHLESS FOR NEOs
-        m_steeringMotor = new WPI_TalonSRX(steeringMotorCANID);
+        m_steeringMotor = new CANSparkMax(steeringMotorCANID, MotorType.kBrushless);
 
         revError("Set IdleMode to Coast", m_driveMotor.setIdleMode(IdleMode.kCoast));
-        m_steeringMotor.setNeutralMode(NeutralMode.Coast); 
+        revError("Set IdleMode to Coast", m_steeringMotor.setIdleMode(IdleMode.kCoast));
 
         // Config Drive motor (neo+spark max)
         revError("Factory Defaults", m_driveMotor.restoreFactoryDefaults());
+        revError("Factory Defaults", m_steeringMotor.restoreFactoryDefaults());
 
-        m_pidController = m_driveMotor.getPIDController();
+        m_drivePidController = m_driveMotor.getPIDController();
 
         // set PID coefficients
-        revError("Config P", m_pidController.setP(Config.ModuleConstants.kDriveP));
-        revError("Config I", m_pidController.setI(Config.ModuleConstants.kDriveI));
-        revError("Config D", m_pidController.setD(Config.ModuleConstants.kDriveD));
-        revError("Config Izone", m_pidController.setIZone(Config.ModuleConstants.kDriveIz));
-        revError("Config FF", m_pidController.setFF(Config.ModuleConstants.kDriveF));
+        revError("Config P", m_drivePidController.setP(Config.ModuleConstants.kDriveP));
+        revError("Config I", m_drivePidController.setI(Config.ModuleConstants.kDriveI));
+        revError("Config D", m_drivePidController.setD(Config.ModuleConstants.kDriveD));
+        revError("Config Izone", m_drivePidController.setIZone(Config.ModuleConstants.kDriveIz));
+        revError("Config FF", m_drivePidController.setFF(Config.ModuleConstants.kDriveF));
 
         m_driveMotor.setInverted(invertDrive);
 
 
         // Config Steering motor (minicim+talon)
-        ctreError("Config Encoder", m_steeringMotor.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Absolute, 0, Config.CanConstants.TIMEOUT_SHORT));
+        m_steeringPidController = m_driveMotor.getPIDController();
 
-        m_steeringMotor.setInverted(invertSteering);
-        m_steeringMotor.setSensorPhase(steeringEncoderReversed);
-
-        TalonSRXConfiguration talonConfig = new TalonSRXConfiguration();
-
-        talonConfig.slot0.kP = Config.ModuleConstants.kSteeringP;
-        talonConfig.slot0.kI = Config.ModuleConstants.kSteeringI;
-        talonConfig.slot0.kD = Config.ModuleConstants.kSteeringD;
-        talonConfig.slot0.integralZone = Config.ModuleConstants.kSteeringIz;
-        talonConfig.slot0.kF = Config.ModuleConstants.kSteeringF;
-        talonConfig.slot0.allowableClosedloopError = Config.ModuleConstants.kSteeringAllowableError;
-
-        talonConfig.feedbackNotContinuous = Config.ModuleConstants.kSteeringFeedbackNotContinuous;
-
-        talonConfig.motionCruiseVelocity = Config.ModuleConstants.kSteeringMMVel;
-        talonConfig.motionAcceleration = Config.ModuleConstants.kSteeringMMAccel;
-        talonConfig.motionCurveStrength = Config.ModuleConstants.kSteeringMMCurve;
-
-        ctreError("ConfigAllSettings", m_steeringMotor.configAllSettings(talonConfig));
+        // set PID coefficients
+        revError("Config P", m_steeringPidController.setP(Config.ModuleConstants.kDriveP));
+        revError("Config I", m_steeringPidController.setI(Config.ModuleConstants.kDriveI));
+        revError("Config D", m_steeringPidController.setD(Config.ModuleConstants.kDriveD));
+        revError("Config Izone", m_steeringPidController.setIZone(Config.ModuleConstants.kDriveIz));
+        revError("Config FF", m_steeringPidController.setFF(Config.ModuleConstants.kDriveF));
     
         
 
@@ -102,14 +91,32 @@ public class SwerveModule {
         // Optimize the reference state to avoid spinning further than 90 degrees
         SwerveModuleState state = SwerveModuleState.optimize(desiredState, getSteeringAngle());
 
-        m_driveMotor.getPIDController().setReference(state.speedMetersPerSecond, ControlType.kVelocity);
+        // Set Velocity of wheel
+        double RPM = state.speedMetersPerSecond * 1; // CONVERT m/s to RPM
+        m_driveMotor.getPIDController().setReference(RPM, ControlType.kVelocity);
 
-        m_steeringMotor.set(ControlMode.MotionMagic, convertAngleToCTREUnits(state.angle));
+
+        // Calculate pos of steering motor and set
+        double currentPos = getSteeringPosition();
+
+        double currentAngle = (currentPos / Config.ModuleConstants.kSteerGearing) * Math.PI * 2;
+        Rotation2d currentPrincipleAngle = new Rotation2d(currentAngle);
+
+        Rotation2d angleError = desiredState.angle.minus(currentPrincipleAngle);
+
+        double posError = (angleError.getRadians() / (Math.PI * 2)) * Config.ModuleConstants.kSteerGearing;
+
+        double desiredPos = currentPos + posError;
+
+
+        m_steeringPidController.setReference(desiredPos, ControlType.kSmartMotion);
+
     }
 
-    /** Zero steering encoder (ONLY USE ONCE TO SET ABSOLUTE VALUE OF ENCODER) */
-    public void resetSteeringEncoder() {
-        m_steeringMotor.setSelectedSensorPosition(0);
+    /** Set the angle of the steering motor*/
+    public void setSteeringEncoder(Rotation2d angle) {
+        double pos = (angle.getRadians()/(Math.PI*2)) * Config.ModuleConstants.kSteerGearing;
+        m_steeringMotor.getEncoder().setPosition(pos);
     }
 
     /** Get the current velocity of the drive wheel */
@@ -123,26 +130,19 @@ public class SwerveModule {
         return metersPerSecond;
     }
 
-    /** Convert angle (Rotation2d) to  CTRE SRX mag encoder units */
-    private double convertAngleToCTREUnits(Rotation2d angle) {
-        return (angle.getRadians() / (Math.PI*2)) * Config.HardwareConstants.SRXEncoder_CPR;
-    }
 
     /** Get the current angle of the steering of the swerve module */
     private Rotation2d getSteeringAngle() {
-        return new Rotation2d((m_steeringMotor.getSelectedSensorPosition() / Config.HardwareConstants.SRXEncoder_CPR) * Math.PI*2);
+        return new Rotation2d((m_steeringMotor.getEncoder().getPosition() * Config.ModuleConstants.kSteerGearing) * Math.PI*2);
     }
 
-
+    /** Get the current encoder position of the steering of the swerve module */
+    private double getSteeringPosition() {
+        return m_steeringMotor.getEncoder().getPosition();
+    }
 
     private void revError(String action, CANError e) {
 
     }
-
-    private void ctreError(String action, ErrorCode e) { 
-
-    }
-
-
 
 }

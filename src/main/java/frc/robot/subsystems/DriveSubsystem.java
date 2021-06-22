@@ -124,19 +124,6 @@ public class DriveSubsystem extends SubsystemBase {
         m_rearRight.setDesiredState(desiredStates[3]);
     }
 
-    /** Resets the drive encoders to currently read a position of 0. */
-    public void resetSteeringEncoderFrontLeft() {
-        m_frontLeft.resetSteeringEncoder();
-    }
-    public void resetSteeringEncoderRearLeft() {
-        m_rearLeft.resetSteeringEncoder();
-    }
-    public void resetSteeringEncoderFrontRight() {
-        m_frontRight.resetSteeringEncoder();
-    }
-    public void resetSteeringEncoderRearRight() {
-        m_rearRight.resetSteeringEncoder();
-    }
 
     /** Zeroes the heading of the robot. */
     public void zeroHeading() {
